@@ -1,0 +1,16 @@
+{
+  "name": "harduex",
+  "owner": { "name": "Harduex" },
+  "description": "Agent skills by Harduex",
+  "plugins": [
+    {
+      "name": "agentic-notebook",
+      "source": "./",
+      "strict": false,
+      "description": "Source-grounded, NotebookLM-style research notebook over any local folder of documents — grounded Q&A with verifiable citations, plus study guides, briefing docs, mind maps, podcast scripts and more.",
+      "license": "MIT",
+      "keywords": ["notebooklm", "research", "citations", "rag", "pdf", "ocr", "study-guide", "knowledge-base"],
+      "skills": ["./agentic-notebook"]
+    }
+  ]
+}
