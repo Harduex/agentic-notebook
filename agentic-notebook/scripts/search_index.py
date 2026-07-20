@@ -22,6 +22,12 @@ as multiple positional arguments — then --get the most promising chunks to
 read them in full before answering. A concept often lives under a different
 name per source ("loudness war" vs "volume war"): sweep the synonyms before
 concluding a source is silent.
+
+Search is multilingual: any script works (Cyrillic, Greek, Arabic, Hebrew,
+Devanagari, ...; Chinese/Japanese/Korean match via character bigrams), e.g.
+  python search_index.py <folder> "войната за сила на звука"
+Query in the sources' language; only light English stemming is applied, so
+for inflected languages sweep morphological variants ("война" / "войната").
 """
 
 import os
@@ -57,24 +63,56 @@ from pathlib import Path
 
 NOTEBOOK_DIR = ".notebook"
 
-STOPWORDS = set("""a an and are as at be but by for from has have i if in into is it its
-of on or s so t that the their there these they this to was we were what which who will
-with you your not can could would should do does did about over under between when where
-how why than then them he she his her also more most other some such no nor only own same
-""".split())
+_TOKEN = re.compile(r"[^\W_]+")  # letters/digits in any script (re is Unicode)
+TOKENIZER_VERSION = 3  # bump when tokenize()/stemming changes, to refresh caches
 
-_TOKEN = re.compile(r"[a-z0-9]+")
-TOKENIZER_VERSION = 2  # bump when tokenize()/stemming changes, to refresh caches
+# Scripts written without spaces between words: whole-run tokens are useless,
+# so these are indexed as overlapping character bigrams (Lucene CJKAnalyzer
+# approach). Ranges are inclusive codepoints.
+_CJK_RANGES = (
+    (0x0E00, 0x0E7F),    # Thai
+    (0x0E80, 0x0EFF),    # Lao
+    (0x1000, 0x109F),    # Myanmar
+    (0x1780, 0x17FF),    # Khmer
+    (0x2E80, 0x2FDF),    # CJK Radicals Supplement + Kangxi Radicals
+    (0x3040, 0x309F),    # Hiragana
+    (0x30A0, 0x30FF),    # Katakana
+    (0x3400, 0x4DBF),    # CJK Unified Ideographs Extension A
+    (0x4E00, 0x9FFF),    # CJK Unified Ideographs
+    (0xAC00, 0xD7AF),    # Hangul Syllables
+    (0xF900, 0xFAFF),    # CJK Compatibility Ideographs
+    (0x20000, 0x2FA1F),  # CJK Unified Ideographs Extensions B-F
+)
+
+
+def _is_cjk(ch: str) -> bool:
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _CJK_RANGES)
 
 
 def normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in text if not unicodedata.combining(c)).lower()
+    text = unicodedata.normalize("NFKD", text).lower()
+    # Fold diacritics only when the base character is Latin/Greek/Cyrillic
+    # (codepoints below U+0530, a pragmatic cutoff). Elsewhere combining
+    # marks are meaning-bearing — Indic vowel signs, Arabic/Hebrew points —
+    # and stripping them collapses distinct words.
+    out, base = [], ""
+    for c in text:
+        if unicodedata.combining(c):
+            if base and ord(base) < 0x0530:
+                continue
+        else:
+            base = c
+        out.append(c)
+    return "".join(out)
 
 
 def _stem(t: str) -> str:
-    """Very light suffix folding so 'wars' matches 'war', 'mixing' matches
-    'mix'. Deliberately conservative — recall matters more than elegance."""
+    """Very light English-only suffix folding so 'wars' matches 'war',
+    'mixing' matches 'mix'. Applied only to ASCII tokens — other languages
+    get recall via query-side morphological variants instead."""
+    if not t.isascii():
+        return t
     for suf in ("ing", "ed", "es"):
         if t.endswith(suf) and len(t) > len(suf) + 2:
             t = t[: -len(suf)]
@@ -85,8 +123,27 @@ def _stem(t: str) -> str:
 
 
 def tokenize(text: str):
-    return [_stem(t) for t in _TOKEN.findall(normalize(text))
-            if t not in STOPWORDS and len(t) > 1]
+    # No stopword list: BM25's IDF already drives ubiquitous terms to ~0 in
+    # any language, and a uniform rule beats an English-only special case.
+    out = []
+    for raw in _TOKEN.findall(normalize(text)):
+        i = 0
+        while i < len(raw):  # split each match into CJK / non-CJK segments
+            cjk = _is_cjk(raw[i])
+            j = i + 1
+            while j < len(raw) and _is_cjk(raw[j]) == cjk:
+                j += 1
+            seg = raw[i:j]
+            i = j
+            if cjk:
+                # character bigrams; a lone character stays a unigram
+                if len(seg) == 1:
+                    out.append(seg)
+                else:
+                    out.extend(seg[k:k + 2] for k in range(len(seg) - 1))
+            elif len(seg) > 1:
+                out.append(_stem(seg))
+    return out
 
 
 def load_chunks(folder: Path):
@@ -135,6 +192,12 @@ def bm25_search(query, chunks, cache, k=8, sources=None, k1=1.5, b=0.75):
         return []
     N = len(chunks)
     df, toks, avgdl = cache["df"], cache["tokens"], cache["avgdl"]
+    # Language-agnostic stopword effect: drop query terms present in more
+    # than half the corpus (near-zero IDF anyway) — unless that would drop
+    # every term. Applied here, not in tokenize(), so the cache stays raw.
+    rare = [t for t in qtoks if df.get(t, 0) <= 0.5 * N]
+    if rare:
+        qtoks = rare
     idf = {t: math.log(1 + (N - df.get(t, 0) + 0.5) / (df.get(t, 0) + 0.5)) for t in set(qtoks)}
     qphrase = normalize(query)
     scored = []

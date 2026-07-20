@@ -164,6 +164,13 @@ the user is clearly driving.
    python3 $SKILL/scripts/search_index.py <folder> --grep "Ebbinghaus"
    ```
 
+   **Query in the sources' language(s).** If the user's question and the
+   sources are in different languages, translate the probe terms and run the
+   probes in the sources' language (optionally also the user's). **For
+   morphologically rich languages, include inflected variants** among the
+   2–4 probes — the index applies only light English stemming — e.g.
+   Bulgarian "война / войната / войни".
+
    Then read the promising chunks in full (`--get S2#014 --context 1`). For
    broad questions ("what is this book's core argument?") also read the
    opening and closing chunks of the relevant source (`--get S2 --full` for

@@ -33,6 +33,10 @@ The first run indexes the folder into a local `.notebook/` workspace inside it. 
 - Audio, video, and image sources when your agent can transcribe or read them
 - Everything stays local — sources are read in place, and all outputs live in the folder's `.notebook/` directory
 
+## Multilingual
+
+Search and indexing work across scripts and languages — Cyrillic, Greek, accented Latin (accent-insensitive both ways), RTL scripts like Arabic and Hebrew, Indic scripts, and Chinese/Japanese/Korean (matched via character bigrams, chunked by character count). Non-English scanned books OCR with `--ocr-lang`, e.g. `--ocr-lang deu+eng`.
+
 ## Requirements
 
 - Python 3.9+ — the bundled scripts are standard-library first; PDF libraries are auto-detected when present

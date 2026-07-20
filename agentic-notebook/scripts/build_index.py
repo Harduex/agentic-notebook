@@ -67,8 +67,8 @@ except Exception:  # keep build_index usable even if ocr_pdf.py is absent
     pick_engines = None
 
 NOTEBOOK_DIR = ".notebook"
-INDEX_VERSION = 3  # bump when extraction/chunking changes; forces re-extraction
-SCAN_WORDS_PER_PAGE = 15   # a PDF averaging fewer words/page than this is treated as scanned
+INDEX_VERSION = 4  # bump when extraction/chunking changes; forces re-extraction
+SCAN_WORDS_PER_PAGE = 15   # a PDF averaging fewer units/page than this is treated as scanned
 CHUNK_TARGET_WORDS = 230
 CHUNK_MAX_WORDS = 340
 CHUNK_MIN_WORDS = 60
@@ -126,6 +126,44 @@ def norm_ws(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+# Scripts written without spaces between words — sizes there are counted per
+# character, not per whitespace-word. Ranges mirror search_index.py's
+# _CJK_RANGES (kept duplicated: the two scripts run standalone by design).
+_CJK_RANGES = (
+    (0x0E00, 0x0E7F),    # Thai
+    (0x0E80, 0x0EFF),    # Lao
+    (0x1000, 0x109F),    # Myanmar
+    (0x1780, 0x17FF),    # Khmer
+    (0x2E80, 0x2FDF),    # CJK Radicals Supplement + Kangxi Radicals
+    (0x3040, 0x309F),    # Hiragana
+    (0x30A0, 0x30FF),    # Katakana
+    (0x3400, 0x4DBF),    # CJK Unified Ideographs Extension A
+    (0x4E00, 0x9FFF),    # CJK Unified Ideographs
+    (0xAC00, 0xD7AF),    # Hangul Syllables
+    (0xF900, 0xFAFF),    # CJK Compatibility Ideographs
+    (0x20000, 0x2FA1F),  # CJK Unified Ideographs Extensions B-F
+)
+
+
+def _is_cjk(ch: str) -> bool:
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _CJK_RANGES)
+
+
+def count_units(text: str) -> int:
+    """Language-agnostic size proxy: 1 unit per non-CJK word, 1 unit per
+    CJK character. Whitespace word counts see a spaceless Chinese paragraph
+    as ~1 word, which breaks chunk budgets and the scanned-PDF heuristic."""
+    cjk, rest = 0, []
+    for ch in text:
+        if _is_cjk(ch):
+            cjk += 1
+            rest.append(" ")
+        else:
+            rest.append(ch)
+    return cjk + len("".join(rest).split())
 
 
 def title_from_path(rel: str) -> str:
@@ -306,6 +344,15 @@ def extract_epub(path: Path):
 # ---------------------------------------------------------- chunking
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\u00c0-\u024f\"'\u201c(])")
+# CJK sentence enders need no following space or capital
+_SENT_SPLIT_CJK = re.compile(r"(?<=[\u3002\uff01\uff1f\uff1b])")  # \u3002\uff01\uff1f\uff1b
+
+
+def _split_sentences(para: str):
+    out = []
+    for piece in _SENT_SPLIT_CJK.split(para):
+        out.extend(s for s in _SENT_SPLIT.split(piece) if s)
+    return out
 
 
 def split_paragraphs(unit_label: str, text: str):
@@ -313,15 +360,14 @@ def split_paragraphs(unit_label: str, text: str):
         para = para.strip()
         if not para:
             continue
-        words = para.split()
-        if len(words) <= CHUNK_MAX_WORDS:
+        if count_units(para) <= CHUNK_MAX_WORDS:
             yield unit_label, para
         else:  # very long paragraph: split on sentences
-            sents, cur = _SENT_SPLIT.split(para), []
+            sents, cur = _split_sentences(para), []
             n = 0
             for s in sents:
                 cur.append(s)
-                n += len(s.split())
+                n += count_units(s)
                 if n >= CHUNK_TARGET_WORDS:
                     yield unit_label, " ".join(cur)
                     cur, n = [], 0
@@ -344,7 +390,7 @@ def chunk_units(units):
 
     for unit_label, text in units:
         for label, para in split_paragraphs(unit_label, text):
-            pwords = len(para.split())
+            pwords = count_units(para)
             if buf_words + pwords > CHUNK_MAX_WORDS and buf_words >= CHUNK_MIN_WORDS:
                 flush()
             if not buf:
@@ -583,7 +629,7 @@ def cmd_build(folder: Path, from_text=None, ocr=False, ocr_lang="eng",
 
             # Scanned-PDF detection: a text layer that thin is useless for Q&A.
             if kind == "pdf" and units:
-                total_w = sum(len(t.split()) for _, t in units)
+                total_w = sum(count_units(t) for _, t in units)
                 if units and total_w / max(1, len(units)) < SCAN_WORDS_PER_PAGE:
                     src["note"] = (f"suspected scan: avg "
                                    f"{total_w / max(1, len(units)):.0f} words/page")
