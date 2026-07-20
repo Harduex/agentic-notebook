@@ -32,6 +32,7 @@ The first run indexes the folder into a local `.notebook/` workspace inside it. 
 - PDF (including scanned books, via built-in OCR), EPUB, DOCX, PPTX, Markdown, HTML, CSV, plain text, code, subtitles
 - Audio, video, and image sources when your agent can transcribe or read them
 - Everything stays local — sources are read in place, and all outputs live in the folder's `.notebook/` directory
+- A `.noteignore` file at the folder root excludes files from indexing (simple gitignore-style globs: `drafts/`, `*.log`); adding a pattern later prunes the already-indexed matches on the next run
 
 ## Multilingual
 

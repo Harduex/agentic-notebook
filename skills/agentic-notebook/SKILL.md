@@ -85,6 +85,11 @@ picked up, and index-format upgrades (which improve retrieval) apply
 themselves only when the indexer runs. An existing index is a reason to run
 it, not to skip it.
 
+A `.noteignore` file at the folder root excludes files from indexing (simple
+gitignore-style globs: `drafts/`, `*.log`). The build prints what it
+excluded — if a source the user asks about seems missing, check that list.
+Details: `references/ingestion.md`.
+
 Files the script cannot parse are registered with status `needs_extraction`
 (scanned/image-only PDFs — including PDFs whose text layer is too thin to be
 usable — plus images) or `needs_transcription` (audio/video). Resolve them in
@@ -147,7 +152,9 @@ Every user turn is one of three things:
 (audio/video: `references/audio-video.md`), save it under `.notebook/studio/`,
 and show it or link it.
 **C. Notebook management →** add/remove sources (re-run the indexer), scope
-sources, save notes, list artifacts, re-show the guide.
+sources, save notes, list artifacts, re-show the guide. "Don't include X" /
+"leave that folder out" → add a pattern to `.noteignore` and re-run the
+indexer, which prunes the matching sources.
 
 After answering, when natural, offer 1–3 follow-up questions the sources can
 answer (NotebookLM's "suggested questions") — but don't nag; skip them when

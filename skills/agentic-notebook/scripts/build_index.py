@@ -56,6 +56,7 @@ import re
 import subprocess
 import sys
 import zipfile
+from fnmatch import fnmatch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -67,6 +68,7 @@ except Exception:  # keep build_index usable even if ocr_pdf.py is absent
     pick_engines = None
 
 NOTEBOOK_DIR = ".notebook"
+NOTEIGNORE_FILE = ".noteignore"
 INDEX_VERSION = 4  # bump when extraction/chunking changes; forces re-extraction
 SCAN_WORDS_PER_PAGE = 15   # a PDF averaging fewer units/page than this is treated as scanned
 CHUNK_TARGET_WORDS = 230
@@ -474,16 +476,89 @@ def extract_source(path: Path, kind: str):
         return None, None, f"error: {type(e).__name__}: {e}"
 
 
-def discover_files(folder: Path):
-    out = []
+# ------------------------------------------------------- .noteignore
+# A <folder>/.noteignore file excludes files from indexing, gitignore-style
+# but deliberately simpler: one glob per line, '#' comments, blank lines
+# skipped, excludes only (no '!' re-includes). A pattern matches a file's
+# folder-relative path or its basename; a pattern naming a directory (with
+# or without a trailing '/') excludes everything inside it; a trailing '/'
+# restricts the pattern to directories.
+
+def load_noteignore(folder: Path):
+    f = folder / NOTEIGNORE_FILE
+    if not f.exists():
+        return []
+    pats = []
+    for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("!"):
+            say(f"[.noteignore] '!' re-include patterns are not supported, "
+                f"skipping: {line}")
+            continue
+        pats.append(line)
+    return pats
+
+
+def _ignore_match_dir(reldir: str, patterns):
+    """First pattern matching the directory path (any prefix or segment), else None."""
+    parts = reldir.replace("\\", "/").split("/")
+    for pat in patterns:
+        p = pat.rstrip("/")
+        for i in range(1, len(parts) + 1):
+            if fnmatch("/".join(parts[:i]), p) or fnmatch(parts[i - 1], p):
+                return pat
+    return None
+
+
+def _ignore_match(rel: str, patterns):
+    """First pattern matching the file's relative path, else None."""
+    rel = rel.replace("\\", "/")
+    if "/" in rel:
+        pat = _ignore_match_dir(rel.rsplit("/", 1)[0], patterns)
+        if pat:
+            return pat
+    name = rel.rsplit("/", 1)[-1]
+    for pat in patterns:
+        if pat.endswith("/"):
+            continue  # directory-only pattern never matches a file itself
+        if fnmatch(rel, pat) or fnmatch(name, pat):
+            return pat
+    return None
+
+
+def discover_files(folder: Path, patterns=None):
+    """Walk the folder. Returns (files, ignored) where ignored is a list of
+    (relpath, pattern) pairs excluded by .noteignore — ignored directories
+    appear as one 'dir/' entry, their contents are never walked."""
+    patterns = patterns or []
+    out, ignored = [], []
     for root, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in
                    {NOTEBOOK_DIR.strip("."), "node_modules", "__pycache__", ".git"}]
         if NOTEBOOK_DIR in Path(root).parts:
             continue
+        relroot = os.path.relpath(root, folder).replace(os.sep, "/")
+        if patterns:
+            keep = []
+            for d in sorted(dirs):
+                reldir = d if relroot == "." else f"{relroot}/{d}"
+                pat = _ignore_match_dir(reldir, patterns)
+                if pat:
+                    ignored.append((reldir + "/", pat))
+                else:
+                    keep.append(d)
+            dirs[:] = keep
         for fn in sorted(files):
             if fn.startswith("."):
                 continue
+            rel = fn if relroot == "." else f"{relroot}/{fn}"
+            if patterns:
+                pat = _ignore_match(rel, patterns)
+                if pat:
+                    ignored.append((rel, pat))
+                    continue
             p = Path(root) / fn
             try:
                 if p.stat().st_size == 0 or p.stat().st_size > MAX_FILE_BYTES:
@@ -491,7 +566,7 @@ def discover_files(folder: Path):
             except OSError:
                 continue
             out.append(p)
-    return sorted(out)
+    return sorted(out), ignored
 
 
 def parse_marked_text(raw: str):
@@ -558,6 +633,7 @@ def rebuild_chunks_for(source, units):
 def cmd_build(folder: Path, from_text=None, ocr=False, ocr_lang="eng",
               ocr_dpi=300, ocr_engine="auto"):
     nb = folder / NOTEBOOK_DIR
+    ignore_patterns = load_noteignore(folder)
     registry = load_registry(nb)
     by_path = {s["path"]: s for s in registry["sources"]}
     try:
@@ -585,6 +661,11 @@ def cmd_build(folder: Path, from_text=None, ocr=False, ocr_lang="eng",
 
     if from_text:
         rel, textfile = from_text
+        pat = _ignore_match(rel, ignore_patterns)
+        if pat:
+            sys.exit(f"'{rel}' matches .noteignore pattern '{pat}'.\n"
+                     "Remove the pattern from .noteignore to index this source "
+                     "(ignored sources are pruned on the next build).")
         raw = Path(textfile).read_text(encoding="utf-8", errors="replace")
         units = parse_marked_text(raw)
         src = by_path.get(rel)
@@ -603,7 +684,12 @@ def cmd_build(folder: Path, from_text=None, ocr=False, ocr_lang="eng",
         touched.add(src["id"])
         print(f"[from-text] {src['id']} {rel}: {src['chunks']} chunks, {src['words']} words")
     else:
-        files = discover_files(folder)
+        files, ignored = discover_files(folder, ignore_patterns)
+        if ignored:
+            fired = sorted({pat for _, pat in ignored})
+            say(f"[.noteignore] {len(ignored)} entr"
+                f"{'y' if len(ignored) == 1 else 'ies'} excluded "
+                f"(patterns: {', '.join(fired)})")
         present = set()
         for p in files:
             rel = str(p.relative_to(folder))
@@ -665,9 +751,19 @@ def cmd_build(folder: Path, from_text=None, ocr=False, ocr_lang="eng",
             else:
                 src["chunks"], src["words"] = 0, 0
                 say(f"[{status}] {src['id']} {rel}")
-        # drop sources whose files vanished (but keep agent-added virtual sources)
+        # drop sources whose files vanished (but keep agent-added virtual
+        # sources) — and sources newly matched by .noteignore, which wins
+        # even over agent-supplied text
+        dropped = [s for s in registry["sources"]
+                   if s["path"] not in present
+                   and _ignore_match(s["path"], ignore_patterns)]
+        for s in dropped:
+            say(f"[.noteignore] removed previously indexed source "
+                f"{s['id']} {s['path']}")
         registry["sources"] = [s for s in registry["sources"]
-                               if s["path"] in present or s.get("extractor") == "agent"]
+                               if (s["path"] in present
+                                   or s.get("extractor") == "agent")
+                               and not _ignore_match(s["path"], ignore_patterns)]
 
     # carry over untouched sources' chunks
     kept_ids = {s["id"] for s in registry["sources"]}
@@ -694,6 +790,15 @@ def print_status(folder: Path):
         flag = "" if s.get("status") == "indexed" else f"  <-- {s.get('status')}"
         say(f"  {s['id']:<4} {s.get('status','?'):<18} {s.get('words',0):>9,}w  "
               f"{s['path']}{flag}")
+    ignore_patterns = load_noteignore(folder)
+    if ignore_patterns:
+        _, ignored = discover_files(folder, ignore_patterns)
+        if ignored:
+            say(f"\nExcluded by .noteignore ({len(ignored)}):")
+            for rel, pat in ignored[:15]:
+                say(f"  - {rel}  (pattern: {pat})")
+            if len(ignored) > 15:
+                say(f"  ... and {len(ignored) - 15} more")
     pending = [s for s in registry["sources"] if s.get("status") != "indexed"]
     if pending:
         say("\nSources needing attention:")

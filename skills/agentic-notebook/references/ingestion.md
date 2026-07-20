@@ -127,6 +127,41 @@ a source you extracted by hand is never silently re-OCR'd.
 user precisely which sources are out (and therefore which topics can't be
 answered), and continue with the rest.
 
+## Excluding files: `.noteignore`
+
+A `.noteignore` file at the folder root excludes files from indexing —
+gitignore in spirit, deliberately simpler in semantics:
+
+```
+# scratch material — not part of the notebook
+drafts/
+*.log
+private-notes.md
+```
+
+- One glob pattern per line; `#` comments and blank lines are skipped.
+- A pattern matches a file's folder-relative path or its basename
+  (`*.log` catches `debug.log` and `sub/dir/trace.log` alike).
+- A pattern naming a directory excludes everything inside it; a trailing
+  `/` restricts the pattern to directories. Ignored directories are never
+  walked.
+- **Excludes only** — `!` re-include patterns are not supported (a warning
+  is printed and the line skipped).
+
+Exclusion is retroactive: adding a pattern and re-running the indexer
+**removes already-indexed matching sources** from the registry, chunks and
+all — this is the normal flow when a user notices junk polluting search
+results. It also wins over `--from-text`: a hand-extracted source whose path
+becomes ignored is pruned, and registering new text for an ignored path is
+refused. Deleting the pattern and re-indexing brings the files back.
+
+Transparency matters: every build prints what `.noteignore` excluded, and
+`--status` lists the excluded paths with the pattern that fired. If a user
+asks why a document isn't being found, check this list *first* — a stale
+ignore pattern silently hiding the one relevant source is this feature's
+main failure mode. When a user says "don't include X in the notebook",
+offer to add it to `.noteignore` rather than asking them to move files.
+
 ## Re-indexing and change management
 
 Run `build_index.py <folder>` again whenever files are added, changed, or
