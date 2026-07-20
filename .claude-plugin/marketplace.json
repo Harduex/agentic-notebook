@@ -9,8 +9,7 @@
       "strict": false,
       "description": "Source-grounded, NotebookLM-style research notebook over any local folder of documents — grounded Q&A with verifiable citations, plus study guides, briefing docs, mind maps, podcast scripts and more.",
       "license": "MIT",
-      "keywords": ["notebooklm", "research", "citations", "rag", "pdf", "ocr", "study-guide", "knowledge-base"],
-      "skills": ["./skills/agentic-notebook"]
+      "keywords": ["notebooklm", "research", "citations", "rag", "pdf", "ocr", "study-guide", "knowledge-base"]
     }
   ]
 }
