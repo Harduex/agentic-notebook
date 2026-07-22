@@ -1,9 +1,0 @@
-{
-  "name": "agentic-notebook",
-  "description": "Source-grounded, NotebookLM-style research notebook over any local folder of documents — grounded Q&A with verifiable citations, plus context-frugal small-model mini variant, study guides, briefing docs, mind maps, podcast scripts and disk task ledgers.",
-  "version": "1.2.0",
-  "license": "MIT",
-  "author": { "name": "Harduex", "url": "https://github.com/Harduex" },
-  "keywords": ["notebooklm", "research", "citations", "rag", "pdf", "ocr", "study-guide", "knowledge-base", "small-model", "context-frugal", "local-llm"]
-}
-
