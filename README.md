@@ -19,21 +19,23 @@ Both skills share the exact same `.notebook/` index format — you can build an 
 
 ## Install
 
+**Which variant?** Use **`agentic-notebook`** for frontier / large models (Claude, Gemini, GPT). Use **`agentic-notebook-mini`** if you run a small local model (7–14B via Ollama, llama.cpp, LM Studio, vLLM) or otherwise work in a tight context budget. Both share the same index format, so you can switch later.
+
+### skills CLI
+
+Works with Claude Code, Gemini CLI, Cursor, Codex, Copilot, OpenCode, and any other agent supported by the [skills CLI](https://github.com/vercel-labs/skills).
+
 ```bash
-# Choose agentic-notebook or agentic-notebook-mini when prompted
-npx skills add Harduex/agentic-notebook
+npx skills add Harduex/agentic-notebook   # pick the variant when prompted
 ```
 
-Works with Claude Code, Gemini CLI, Cursor, Codex, Copilot, OpenCode, and any other agent supported by the [skills CLI](https://github.com/vercel-labs/skills). Claude Code users can install either variant as a plugin:
+### Claude Code plugin
 
 ```
 /plugin marketplace add Harduex/agentic-notebook
 
-# Install original skill
-/plugin install agentic-notebook@harduex
-
-# Install mini skill for local/small models
-/plugin install agentic-notebook-mini@harduex
+/plugin install agentic-notebook@harduex        # frontier / large models
+/plugin install agentic-notebook-mini@harduex   # small local models (7–14B)
 ```
 
 ## Use

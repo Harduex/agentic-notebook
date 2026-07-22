@@ -37,6 +37,13 @@ Same repo layout as the original, so the skills CLI picks it up:
 npx skills add Harduex/agentic-notebook   # choose agentic-notebook-mini
 ```
 
+Claude Code users can install it directly as a plugin:
+
+```
+/plugin marketplace add Harduex/agentic-notebook
+/plugin install agentic-notebook-mini@harduex
+```
+
 Or copy the `agentic-notebook-mini/` folder next to wherever your original
 skill lives (e.g. `.opencode/skills/` for a project, or your agent's global
 skills directory). Both skills can be installed side by side; ask the agent
