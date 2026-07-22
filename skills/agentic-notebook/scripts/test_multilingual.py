@@ -7,6 +7,7 @@ scanned-PDF heuristic across scripts. Run with:
   python3 test_multilingual.py
 """
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -194,9 +195,10 @@ class TestCacheAndVersions(unittest.TestCase):
 
 class TestCLI(unittest.TestCase):
     def cli(self, *args):
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
         out = subprocess.run([sys.executable, str(SCRIPTS / "search_index.py"),
                               str(Fixture.folder), *args],
-                             capture_output=True, text=True)
+                             capture_output=True, text=True, encoding="utf-8", env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
         return out.stdout
 

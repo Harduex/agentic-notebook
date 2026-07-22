@@ -6,17 +6,34 @@ Turn any folder of documents into a NotebookLM-style research notebook for your 
 
 Point your agent at a folder of PDFs, books, papers, or notes. The skill indexes everything, and from then on the agent answers questions **only from those sources**, citing the exact file, page, and quote behind every claim — and can turn the sources into study guides, briefing docs, FAQs, timelines, mind maps, flashcards, quizzes, data tables, and podcast or video scripts.
 
+## Available Skills
+
+This repository includes two skill variants:
+
+| Skill | Optimized For | Key Features |
+|---|---|---|
+| **`agentic-notebook`** | Frontier & large models (Claude 3.5/3.7, Gemini, GPT-4o) | High-context research, rich studio artifacts, full interactive Q&A and analysis |
+| **`agentic-notebook-mini`** | Small local models (7–14B: Ollama, llama.cpp, LM Studio, vLLM) | Context-frugal multi-query + grep search, disk task ledger (`checkpoint.py`), `--toc` skimming, `--list`, size limits, strict command quotas |
+
+Both skills share the exact same `.notebook/` index format — you can build an index with one and query it with the other interchangeably.
+
 ## Install
 
 ```bash
+# Choose agentic-notebook or agentic-notebook-mini when prompted
 npx skills add Harduex/agentic-notebook
 ```
 
-Works with Claude Code, Gemini CLI, Cursor, Codex, Copilot, OpenCode, and any other agent supported by the [skills CLI](https://github.com/vercel-labs/skills). Claude Code users can alternatively install it as a plugin:
+Works with Claude Code, Gemini CLI, Cursor, Codex, Copilot, OpenCode, and any other agent supported by the [skills CLI](https://github.com/vercel-labs/skills). Claude Code users can install either variant as a plugin:
 
 ```
 /plugin marketplace add Harduex/agentic-notebook
+
+# Install original skill
 /plugin install agentic-notebook@harduex
+
+# Install mini skill for local/small models
+/plugin install agentic-notebook-mini@harduex
 ```
 
 ## Use
@@ -25,7 +42,20 @@ Ask your agent something like:
 
 > Act as a notebook over ./my-books — what do these authors disagree about on mastering loudness?
 
+Or for local/small model setups:
+
+> Use notebook mini over ./my-notes — find all recipes and save them to a study guide.
+
 The first run indexes the folder into a local `.notebook/` workspace inside it. After that: grounded Q&A with citations you can check (`[1] book.pdf · p.41 · "exact quote from the page"`), honest "the sources don't cover this" answers when they don't, and one-request artifacts — "make me a study guide from these", "give me a two-host podcast script", "build a comparison table across the papers".
+
+## Mini Variant (`agentic-notebook-mini`) Highlights
+
+For 7B–14B models (e.g. Ornith, Qwen, Gemma, Llama), context budget is precious. `agentic-notebook-mini` fixes common small-model failure modes:
+
+- **Disk Task Ledger (`checkpoint.py`)**: For exhaustive extraction tasks ("find all X"), task state lives on disk. Candidates, per-source sweep status, and labels are stored in `.notebook/tasks/<slug>.json`. Work can be interrupted and resumed at any point with one command.
+- **Fused Compact Search**: Combines multiple semantic queries and exact string greps into a single deduplicated CLI call with reciprocal-rank fusion and per-source coverage indicators.
+- **Source Skimming (`--toc`)**: View line-by-line outlines of whole sources in cheap, paginated batches instead of loading full text into context.
+- **Safety Guards**: Refuses full-source text dumps on large files (>2,500 words) and enforces verbatim citation checks with `verify_citations.py`.
 
 ## What it handles
 
@@ -33,6 +63,21 @@ The first run indexes the folder into a local `.notebook/` workspace inside it. 
 - Audio, video, and image sources when your agent can transcribe or read them
 - Everything stays local — sources are read in place, and all outputs live in the folder's `.notebook/` directory
 - A `.noteignore` file at the folder root excludes files from indexing (simple gitignore-style globs: `drafts/`, `*.log`); adding a pattern later prunes the already-indexed matches on the next run
+
+## Repository Structure
+
+```
+agentic-notebook/
+├── skills/
+│   ├── agentic-notebook/        # Original skill for frontier / large models
+│   │   ├── SKILL.md
+│   │   └── scripts/
+│   └── agentic-notebook-mini/   # Mini variant for small local 7-14B models
+│       ├── SKILL.md
+│       ├── README.md
+│       └── scripts/             # Includes checkpoint.py disk task ledger
+└── .claude-plugin/              # Claude Code marketplace manifests
+```
 
 ## Multilingual
 
@@ -48,3 +93,4 @@ The scripts are plain, readable Python and only ever write inside the target fol
 ## License
 
 [MIT](LICENSE)
+

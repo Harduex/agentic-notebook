@@ -5,11 +5,20 @@
   "plugins": [
     {
       "name": "agentic-notebook",
-      "source": "./",
+      "source": "./skills/agentic-notebook",
       "strict": false,
       "description": "Source-grounded, NotebookLM-style research notebook over any local folder of documents — grounded Q&A with verifiable citations, plus study guides, briefing docs, mind maps, podcast scripts and more.",
       "license": "MIT",
       "keywords": ["notebooklm", "research", "citations", "rag", "pdf", "ocr", "study-guide", "knowledge-base"]
+    },
+    {
+      "name": "agentic-notebook-mini",
+      "source": "./skills/agentic-notebook-mini",
+      "strict": false,
+      "description": "Small-model, context-frugal variant of agentic-notebook tuned for local 7-14B models (Ollama, LM Studio, llama.cpp, OpenCode) with limited context windows.",
+      "license": "MIT",
+      "keywords": ["notebooklm", "research", "citations", "rag", "small-model", "context-frugal", "local-llm", "ollama", "opencode"]
     }
   ]
 }
+
